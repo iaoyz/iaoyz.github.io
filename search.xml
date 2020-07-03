@@ -1,6 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
+    <title>重新认识Redis(二)</title>
+    <url>/3a47a4b7/</url>
+    <content><![CDATA[<h1 id="Redis-conf详解"><a href="#Redis-conf详解" class="headerlink" title="Redis.conf详解"></a>Redis.conf详解</h1><blockquote>
+<p><strong>Redis.conf是redis非常重要的配置文件,很多功能的配置都依赖此文件</strong></p>
+<blockquote>
+<p><strong>挑几个重要的看看</strong></p>
+</blockquote>
+</blockquote>
+<h2 id="基本配置"><a href="#基本配置" class="headerlink" title="基本配置"></a>基本配置</h2><ul>
+<li>开局首先约定了存储单位, 配置中对单位的大小写不敏感，1GB、1Gb和1gB都是相同的。由此也说明，Redis 只支持 bytes，不支持 bit 单位。<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Note on units: when memory size is needed, it is possible to specify</span></span><br><span class="line"><span class="comment"># it in the usual form of 1k 5GB 4M and so forth:</span></span><br><span class="line"><span class="comment">#</span></span><br><span class="line"><span class="comment"># 1k =&gt; 1000 bytes</span></span><br><span class="line"><span class="comment"># 1kb =&gt; 1024 bytes</span></span><br><span class="line"><span class="comment"># 1m =&gt; 1000000 bytes</span></span><br><span class="line"><span class="comment"># 1mb =&gt; 1024*1024 bytes</span></span><br><span class="line"><span class="comment"># 1g =&gt; 1000000000 bytes</span></span><br><span class="line"><span class="comment"># 1gb =&gt; 1024*1024*1024 bytes</span></span><br><span class="line"><span class="comment">#</span></span><br><span class="line"><span class="comment"># units are case insensitive so 1GB 1Gb 1gB are all the same.</span></span><br></pre></td></tr></table></figure></li>
+<li>redis提供了引入自定义配置文件的功能,只需要开放include 引入即可;<br>当同一个配置项在多个配置文件里都定义,redis会默认选择最后一行读入的配置为准;</li>
+</ul>
+<h5 id="注意-“inclue”选项不能被admin或Redis哨兵的-quot-CONFIG-REWRITE-quot-命令重写"><a href="#注意-“inclue”选项不能被admin或Redis哨兵的-quot-CONFIG-REWRITE-quot-命令重写" class="headerlink" title="注意:“inclue”选项不能被admin或Redis哨兵的&quot;CONFIG REWRITE&quot;命令重写"></a><code>注意:“inclue”选项不能被admin或Redis哨兵的&quot;CONFIG REWRITE&quot;命令重写</code></h5><figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># include /path/to/local.conf</span></span><br><span class="line"><span class="comment"># include /path/to/other.conf</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在4.0以上的版本,redis支持了可扩展了module，让用户可以自己根据需求自己扩展redis相关的功能了,只需要根据官方的格式编写.既可以自己实现扩展<a href="http://www.redis.cn/topics/modules-intro.html" target="_blank" rel="noopener">Redis Modules文档</a><figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># loadmodule /path/to/my_module.so</span></span><br><span class="line"><span class="comment"># loadmodule /path/to/other_module.so</span></span><br></pre></td></tr></table></figure>
+<h2 id="备份"><a href="#备份" class="headerlink" title="备份"></a>备份</h2></li>
+</ul>
+]]></content>
+      <categories>
+        <category>中间件</category>
+      </categories>
+      <tags>
+        <tag>redis系列</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>重新认识Redis(一)</title>
     <url>/95763fd5/</url>
     <content><![CDATA[<h1 id="Redis的对象类型和编码"><a href="#Redis的对象类型和编码" class="headerlink" title="Redis的对象类型和编码"></a>Redis的对象类型和编码</h1><blockquote>
@@ -107,32 +133,6 @@
 <h3 id="String前面已经讲过了-不再讲了"><a href="#String前面已经讲过了-不再讲了" class="headerlink" title="String前面已经讲过了,不再讲了"></a>String前面已经讲过了,不再讲了</h3><h3 id="Hash"><a href="#Hash" class="headerlink" title="Hash"></a>Hash</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  hash-max-ziplist-entries 512</span><br><span class="line">  hash-max-ziplist-value 64</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  哈希对象保存的元素数量小于 512 个</span><br><span class="line">  哈希对象保存的所有字符串元素的长度都小于 64 字节</span><br><span class="line"></span><br><span class="line">不能满足上述条件的哈希对象将使用 OBJ_ENCODING_HT 作为对象编码，即使用字典作为底层数据结构。否则使用 OBJ_ENCODING_ZIPLIST 作为对象编码，即压缩列表作为底层数据结构。</span><br><span class="line"></span><br><span class="line">优化方案:将hash尽可能的拆成多个小hash,利用zipList节省内存</span><br></pre></td></tr></table></figure>
 <h3 id="Set"><a href="#Set" class="headerlink" title="Set"></a>Set</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  set-max-intset-entries 512</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  集合对象保存的元素数量不超过512个</span><br><span class="line"></span><br><span class="line">不能满足上述条件，或是元素不全部为整数（ intset 数据结构的天然限制）的集合对象，将使用 OBJ_ENCODING_HT 作为对象编码，即使用字典作为底层数据结构。否则使用 OBJ_ENCODING_INTSET 作为对象编码，即 intset 作为底层数据结构。</span><br></pre></td></tr></table></figure>
 <h3 id="Zset"><a href="#Zset" class="headerlink" title="Zset"></a>Zset</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  zset-max-ziplist-entries 128</span><br><span class="line">  zset-max-ziplist-value 64</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  有序集合保存的元素数量小于128个</span><br><span class="line">  有序集合保存的所有元素成员的长度都小于64字节</span><br><span class="line"></span><br><span class="line">不能满足上述条件的有序集合对象，将使用 OBJ_ENCODING_SKIPLIST 作为对象编码，即跳跃表作为底层数据结构。否则使用 OBJ_ENCODING_ZIPLIST 作为对象编码，即压缩列表作为底层数据结构。</span><br></pre></td></tr></table></figure>
-]]></content>
-      <categories>
-        <category>中间件</category>
-      </categories>
-      <tags>
-        <tag>redis系列</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>重新认识Redis(二)</title>
-    <url>/3a47a4b7/</url>
-    <content><![CDATA[<h1 id="Redis-conf详解"><a href="#Redis-conf详解" class="headerlink" title="Redis.conf详解"></a>Redis.conf详解</h1><blockquote>
-<p><strong>Redis.conf是redis非常重要的配置文件,很多功能的配置都依赖此文件</strong></p>
-<blockquote>
-<p><strong>挑几个重要的看看</strong></p>
-</blockquote>
-</blockquote>
-<h2 id="基本配置"><a href="#基本配置" class="headerlink" title="基本配置"></a>基本配置</h2><ul>
-<li>开局首先约定了存储单位, 配置中对单位的大小写不敏感，1GB、1Gb和1gB都是相同的。由此也说明，Redis 只支持 bytes，不支持 bit 单位。<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Note on units: when memory size is needed, it is possible to specify</span></span><br><span class="line"><span class="comment"># it in the usual form of 1k 5GB 4M and so forth:</span></span><br><span class="line"><span class="comment">#</span></span><br><span class="line"><span class="comment"># 1k =&gt; 1000 bytes</span></span><br><span class="line"><span class="comment"># 1kb =&gt; 1024 bytes</span></span><br><span class="line"><span class="comment"># 1m =&gt; 1000000 bytes</span></span><br><span class="line"><span class="comment"># 1mb =&gt; 1024*1024 bytes</span></span><br><span class="line"><span class="comment"># 1g =&gt; 1000000000 bytes</span></span><br><span class="line"><span class="comment"># 1gb =&gt; 1024*1024*1024 bytes</span></span><br><span class="line"><span class="comment">#</span></span><br><span class="line"><span class="comment"># units are case insensitive so 1GB 1Gb 1gB are all the same.</span></span><br></pre></td></tr></table></figure></li>
-<li>redis提供了引入自定义配置文件的功能,只需要开放include 引入即可;<br>当同一个配置项在多个配置文件里都定义,redis会默认选择最后一行读入的配置为准;</li>
-</ul>
-<h5 id="注意-“inclue”选项不能被admin或Redis哨兵的-quot-CONFIG-REWRITE-quot-命令重写"><a href="#注意-“inclue”选项不能被admin或Redis哨兵的-quot-CONFIG-REWRITE-quot-命令重写" class="headerlink" title="注意:“inclue”选项不能被admin或Redis哨兵的&quot;CONFIG REWRITE&quot;命令重写"></a><code>注意:“inclue”选项不能被admin或Redis哨兵的&quot;CONFIG REWRITE&quot;命令重写</code></h5><figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># include /path/to/local.conf</span></span><br><span class="line"><span class="comment"># include /path/to/other.conf</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>在4.0以上的版本,redis支持了可扩展了module，让用户可以自己根据需求自己扩展redis相关的功能了,只需要根据官方的格式编写.既可以自己实现扩展<a href="http://www.redis.cn/topics/modules-intro.html" target="_blank" rel="noopener">Redis Modules文档</a><figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># loadmodule /path/to/my_module.so</span></span><br><span class="line"><span class="comment"># loadmodule /path/to/other_module.so</span></span><br></pre></td></tr></table></figure>
-<h2 id="备份"><a href="#备份" class="headerlink" title="备份"></a>备份</h2></li>
-</ul>
 ]]></content>
       <categories>
         <category>中间件</category>
