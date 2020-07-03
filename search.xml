@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>重新认识Redis(一)</title>
+    <url>/95763fd5/</url>
+    <content><![CDATA[<h1 id="Redis的对象类型和编码"><a href="#Redis的对象类型和编码" class="headerlink" title="Redis的对象类型和编码"></a>Redis的对象类型和编码</h1><blockquote>
+<p><strong>首先我们来看一道常见的面试题:  Redis支持的数据结构有哪些？</strong><br>    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;大多数人都能轻松的给出答案,五种:String、List、Hash、Set、Zset;但其实这还远远不够,这仅仅redis的常用基本数据类型，每一种数据类型内部还包含着多种数据结构;<strong>要记住类型和结构是不一样的</strong></p>
+</blockquote>
+<p><img src= "/img/loading.gif" data-src="/images/redisPic/redis%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84.jpg" alt=""></p>
+<h3 id="我们来看一组实验"><a href="#我们来看一组实验" class="headerlink" title="我们来看一组实验"></a>我们来看一组实验</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">通过[<span class="built_in">type</span> key]指令查看值的数据类型</span><br><span class="line">通过[object encoding key]指令查看值的数据结构</span><br><span class="line"></span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">set</span> str1 1</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">type</span> str1</span><br><span class="line">string</span><br><span class="line">127.0.0.1:6379&gt; object encoding str1</span><br><span class="line"><span class="string">"int"</span></span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">set</span> str2 <span class="string">"zhangsan"</span></span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">type</span> str2</span><br><span class="line">string</span><br><span class="line">127.0.0.1:6379&gt; object encoding str2</span><br><span class="line"><span class="string">"embstr"</span></span><br></pre></td></tr></table></figure>
+<p>可以得出几个重要的结论</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">1.redis的数据结构有很多种</span><br><span class="line">2.即便是同一个String类型的值,根据value的不通,redis选择的数据结构是不一样的</span><br><span class="line"></span><br><span class="line">“思考:为什么同一个String类型的值,会有多个数据结构?,选择的依据又是什么?”</span><br></pre></td></tr></table></figure>
+<p>带着问题我们接着往下看</p>
+<hr>
+<h2 id="redisObject"><a href="#redisObject" class="headerlink" title="redisObject"></a>redisObject</h2><blockquote>
+<blockquote>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Redis使用对象来表示数据库中的键和值,每次当我们在Redis的数据库中新创建一个键值对时，我们至少会创建两个对象，一个对象用作键值对的键（键对象），另一个对象用作键值对的值（值对象）</p>
+</blockquote>
+</blockquote>
+<p><strong>举个栗子</strong>:<br>    以下 SET 命令在数据库中创建了一个新的键值对， 其中键值对的键是一个包含了字符串值 “str” 的对象， 而键值对的值则是一个包含了字符串值 “zhangsan” 的对象,<font color=red size=3><em>通过键对象中的指针指向值对象</em></font></p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">127.0.0.1:6379&gt; <span class="built_in">set</span> str <span class="string">"zhangsan"</span></span><br><span class="line">OK</span><br></pre></td></tr></table></figure>
+<p>Redis中定义了一个C语言实现的结构体作为对象</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">redisObject</span> &#123;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 对象类型</span></span><br><span class="line">    <span class="keyword">unsigned</span> type:<span class="number">4</span>;        </span><br><span class="line"></span><br><span class="line">    <span class="comment">// 不使用(对齐位)</span></span><br><span class="line">    <span class="keyword">unsigned</span> notused:<span class="number">2</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 底层编码方式</span></span><br><span class="line">    <span class="keyword">unsigned</span> encoding:<span class="number">4</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// LRU 时间（相对于 server.lruclock）</span></span><br><span class="line">    <span class="keyword">unsigned</span> lru:<span class="number">22</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 引用计数</span></span><br><span class="line">    <span class="keyword">int</span> refcount;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 指向对象的值</span></span><br><span class="line">    <span class="keyword">void</span> *ptr;</span><br><span class="line"></span><br><span class="line">&#125; robj;</span><br></pre></td></tr></table></figure>
+<h2 id="type-对象类型"><a href="#type-对象类型" class="headerlink" title="type-对象类型"></a>type-对象类型</h2><p>属性 type 记录了对象是什么类型,值的相关定义如下:</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">define OBJ_STRING 0</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_LIST 1</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_SET 2</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ZSET 3</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_HASH 4</span></span><br></pre></td></tr></table></figure>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;前面说到，键和值都是一个对象。键总是一个字符串对象，其属性 type 总为 OBJ_STRING ，值对象则可以是字符串对象，列表对象等，不同的类型的对象，实则就是属性 type 不同的 <strong>redisObject</strong> 。如列表键，指的是属性 type 为 OBJ_LIST 的值对象。</p>
+<h5 id="可以通过客户端指令-type-key-查看值对象的数据类型-本文开头已经演示过了"><a href="#可以通过客户端指令-type-key-查看值对象的数据类型-本文开头已经演示过了" class="headerlink" title="可以通过客户端指令[type key]查看值对象的数据类型,本文开头已经演示过了"></a><code>可以通过客户端指令[type key]查看值对象的数据类型,本文开头已经演示过了</code></h5><h2 id="encoding-编码类型"><a href="#encoding-编码类型" class="headerlink" title="encoding-编码类型"></a>encoding-编码类型</h2><p>属性 encoding ，其实指的是该对象底层所使用的数据结构类型，即指针 ptr 所指向的数据结构，相关的定义如下：</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_RAW 0     /* 简单动态字符串 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_INT 1     /* 整型 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_HT 2      /* 字典 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_ZIPMAP 3  /* 压缩字典（不再使用）*/</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_LINKEDLIST 4 /* 双端链表（不再使用） */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_ZIPLIST 5 /* 压缩列表 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_INTSET 6  /* 整数集合 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_SKIPLIST 7  /* 跳表 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_EMBSTR 8  /* Embedded 编码的简单动态字符串 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_QUICKLIST 9 /* 快速列表，基于压缩列表实现的列表，取代了之前的双端链表 */</span></span><br></pre></td></tr></table></figure>
+<h5 id="可以通过客户端指令-object-encoding-key-查看值对象的数据结构-本文开头已经演示过了"><a href="#可以通过客户端指令-object-encoding-key-查看值对象的数据结构-本文开头已经演示过了" class="headerlink" title="可以通过客户端指令[object encoding key]查看值对象的数据结构,本文开头已经演示过了"></a><code>可以通过客户端指令[object encoding key]查看值对象的数据结构,本文开头已经演示过了</code></h5><p><font color=red size=5>还记得前文的思考题吗?</font></p>
+<blockquote>
+<p>“思考:为什么同一个String类型的值,会有多个数据结构?,选择的依据又是什么?”</p>
+</blockquote>
+<p>官方提供的对象类型与编码类型关系表可以解答我们的第一个问题:</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>编码</th>
+<th>对象</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OBJ_STRING</td>
+<td>OBJ_ENCODING_INT</td>
+<td>使用long类型的整数值实现的字符串对象</td>
+</tr>
+<tr>
+<td>OBJ_STRING</td>
+<td>OBJ_ENCODING_EMBSTR</td>
+<td>使用embstr编码的简单动态字符串实现的字符串对象</td>
+</tr>
+<tr>
+<td>OBJ_STRING</td>
+<td>OBJ_ENCODING_RAW</td>
+<td>使用简单动态字符串实现的字符串对象</td>
+</tr>
+<tr>
+<td>OBJ_LIST</td>
+<td>OBJ_ENCODING_QUICKLIST</td>
+<td>使用 quicklist 实现的列表对象</td>
+</tr>
+<tr>
+<td>OBJ_HASH</td>
+<td>OBJ_ENCODING_ZIPLIST</td>
+<td>使用压缩列表实现的哈希对象</td>
+</tr>
+<tr>
+<td>OBJ_HASH</td>
+<td>OBJ_ENCODING_HT</td>
+<td>使用字典实现的哈希对象</td>
+</tr>
+<tr>
+<td>OBJ_SET</td>
+<td>OBJ_ENCODING_INTSET</td>
+<td>使用数组实现的集合对象,元素从小到大排列</td>
+</tr>
+<tr>
+<td>OBJ_SET</td>
+<td>OBJ_ENCODING_HT</td>
+<td>使用字典实现的哈希对象</td>
+</tr>
+<tr>
+<td>OBJ_ZSET</td>
+<td>OBJ_ENCODING_ZIPLIST</td>
+<td>使用压缩列表实现的有序集合对象</td>
+</tr>
+<tr>
+<td>OBJ_ZSET</td>
+<td>OBJ_ENCODING_SKIPLIST</td>
+<td>使用跳跃表实现的有序集合对象</td>
+</tr>
+</tbody></table>
+<p>能看出来字符串的编码可以是int，raw或者embstr;</p>
+<p>那又是怎么选择的呢?</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">如果一个字符串内容可转为long，那么该字符串会被转化为long类型，对象ptr指向该long对象，并且对象类型也用int类型表示。普通的字符串有两种，embstr和raw。如果字符串对象的长度小于44字节，就用embstr对象。否则用的raw对象</span><br></pre></td></tr></table></figure>
+<h5 id="C语言实现的代码细节-这里就不看了-有兴趣可以看看Redis的String实现原理"><a href="#C语言实现的代码细节-这里就不看了-有兴趣可以看看Redis的String实现原理" class="headerlink" title="C语言实现的代码细节,这里就不看了,有兴趣可以看看Redis的String实现原理"></a><code>C语言实现的代码细节,这里就不看了,有兴趣可以看看</code><a href="https://blog.csdn.net/a81561826/article/details/102047824" target="_blank" rel="noopener">Redis的String实现原理</a></h5><blockquote>
+<p>优点：<br>    (1) embstr的创建只需分配一次内存，而raw为两次（一次为sds分配对象，另一次为redisObject分配对象，embstr省去了第一次）。<br>        (2）相对地，释放内存的次数也由两次变为一次。<br>        (3）embstr的redisObject和sds放在一起，更好地利用缓存带来的优势</p>
+<blockquote>
+<p>缺点：<br>    redis并未提供任何修改embstr的方式，即embstr是只读的形式。对embstr的修改实际上是先转换为raw再进行修改。</p>
+</blockquote>
+</blockquote>
+<h2 id="lru-空转时间"><a href="#lru-空转时间" class="headerlink" title="lru-空转时间"></a>lru-空转时间</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;属性 lru 记录的是对象最后一次被访问的时间。通过该属性，可以利用命令 [object idletime key] 获取对象的空转时长（命令[object idletime key]不会更新 lru 属性）。object idletime 计算得出的空转时长是通过当前时间减去指定对象的 lru 属性得出的，其单位为秒。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">127.0.0.1:6379&gt; object idletime str2</span><br><span class="line">(<span class="built_in">integer</span>) 3636</span><br></pre></td></tr></table></figure>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;属性 lru 除了应用于命令 object idletime 外，还有另一项作用。<br>当服务器开启了 maxmemory 选项，并且服务器用于回收内存的算法为 volatile-lru 或者 allkeys-lru 的话，那么当 Redis 实例的占用的内存超过 maxmemory 后，空转时间较长的对象将会优先被回收。</p>
+<h2 id="refcount-引用计数"><a href="#refcount-引用计数" class="headerlink" title="refcount-引用计数"></a>refcount-引用计数</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;refcount记录的是对象被引用数。Redis 构建的对象系统使用引用计数机制实现内存回收。引用计算为 0 的对象将会被回收。</p>
+<h2 id="编码转换"><a href="#编码转换" class="headerlink" title="编码转换"></a>编码转换</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;通过前面的类型编码映射表可以看到,除了List外,String,Hash,Set,Zset都具有多种编码结构;</p>
+<h3 id="String前面已经讲过了-不再讲了"><a href="#String前面已经讲过了-不再讲了" class="headerlink" title="String前面已经讲过了,不再讲了"></a>String前面已经讲过了,不再讲了</h3><h3 id="Hash"><a href="#Hash" class="headerlink" title="Hash"></a>Hash</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  hash-max-ziplist-entries 512</span><br><span class="line">  hash-max-ziplist-value 64</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  哈希对象保存的元素数量小于 512 个</span><br><span class="line">  哈希对象保存的所有字符串元素的长度都小于 64 字节</span><br><span class="line"></span><br><span class="line">不能满足上述条件的哈希对象将使用 OBJ_ENCODING_HT 作为对象编码，即使用字典作为底层数据结构。否则使用 OBJ_ENCODING_ZIPLIST 作为对象编码，即压缩列表作为底层数据结构。</span><br><span class="line"></span><br><span class="line">优化方案:将hash尽可能的拆成多个小hash,利用zipList节省内存</span><br></pre></td></tr></table></figure>
+<h3 id="Set"><a href="#Set" class="headerlink" title="Set"></a>Set</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  set-max-intset-entries 512</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  集合对象保存的元素数量不超过512个</span><br><span class="line"></span><br><span class="line">不能满足上述条件，或是元素不全部为整数（ intset 数据结构的天然限制）的集合对象，将使用 OBJ_ENCODING_HT 作为对象编码，即使用字典作为底层数据结构。否则使用 OBJ_ENCODING_INTSET 作为对象编码，即 intset 作为底层数据结构。</span><br></pre></td></tr></table></figure>
+<h3 id="Zset"><a href="#Zset" class="headerlink" title="Zset"></a>Zset</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  zset-max-ziplist-entries 128</span><br><span class="line">  zset-max-ziplist-value 64</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  有序集合保存的元素数量小于128个</span><br><span class="line">  有序集合保存的所有元素成员的长度都小于64字节</span><br><span class="line"></span><br><span class="line">不能满足上述条件的有序集合对象，将使用 OBJ_ENCODING_SKIPLIST 作为对象编码，即跳跃表作为底层数据结构。否则使用 OBJ_ENCODING_ZIPLIST 作为对象编码，即压缩列表作为底层数据结构。</span><br></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>中间件</category>
+      </categories>
+      <tags>
+        <tag>redis系列</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>重新认识Redis(二)</title>
+    <url>/3a47a4b7/</url>
+    <content><![CDATA[<h1 id="Redis-conf详解"><a href="#Redis-conf详解" class="headerlink" title="Redis.conf详解"></a>Redis.conf详解</h1><blockquote>
+<p><strong>Redis.conf是redis非常重要的配置文件,很多功能的配置都依赖此文件</strong></p>
+<blockquote>
+<p><strong>挑几个重要的看看</strong></p>
+</blockquote>
+</blockquote>
+<h2 id="基本配置"><a href="#基本配置" class="headerlink" title="基本配置"></a>基本配置</h2><ul>
+<li>开局首先约定了存储单位, 配置中对单位的大小写不敏感，1GB、1Gb和1gB都是相同的。由此也说明，Redis 只支持 bytes，不支持 bit 单位。<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Note on units: when memory size is needed, it is possible to specify</span></span><br><span class="line"><span class="comment"># it in the usual form of 1k 5GB 4M and so forth:</span></span><br><span class="line"><span class="comment">#</span></span><br><span class="line"><span class="comment"># 1k =&gt; 1000 bytes</span></span><br><span class="line"><span class="comment"># 1kb =&gt; 1024 bytes</span></span><br><span class="line"><span class="comment"># 1m =&gt; 1000000 bytes</span></span><br><span class="line"><span class="comment"># 1mb =&gt; 1024*1024 bytes</span></span><br><span class="line"><span class="comment"># 1g =&gt; 1000000000 bytes</span></span><br><span class="line"><span class="comment"># 1gb =&gt; 1024*1024*1024 bytes</span></span><br><span class="line"><span class="comment">#</span></span><br><span class="line"><span class="comment"># units are case insensitive so 1GB 1Gb 1gB are all the same.</span></span><br></pre></td></tr></table></figure></li>
+<li>redis提供了引入自定义配置文件的功能,只需要开放include 引入即可;<br>当同一个配置项在多个配置文件里都定义,redis会默认选择最后一行读入的配置为准;</li>
+</ul>
+<h5 id="注意-“inclue”选项不能被admin或Redis哨兵的-quot-CONFIG-REWRITE-quot-命令重写"><a href="#注意-“inclue”选项不能被admin或Redis哨兵的-quot-CONFIG-REWRITE-quot-命令重写" class="headerlink" title="注意:“inclue”选项不能被admin或Redis哨兵的&quot;CONFIG REWRITE&quot;命令重写"></a><code>注意:“inclue”选项不能被admin或Redis哨兵的&quot;CONFIG REWRITE&quot;命令重写</code></h5><figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># include /path/to/local.conf</span></span><br><span class="line"><span class="comment"># include /path/to/other.conf</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在4.0以上的版本,redis支持了可扩展了module，让用户可以自己根据需求自己扩展redis相关的功能了,只需要根据官方的格式编写.既可以自己实现扩展<a href="http://www.redis.cn/topics/modules-intro.html" target="_blank" rel="noopener">Redis Modules文档</a><figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="comment"># loadmodule /path/to/my_module.so</span></span><br><span class="line"><span class="comment"># loadmodule /path/to/other_module.so</span></span><br></pre></td></tr></table></figure>
+<h2 id="备份"><a href="#备份" class="headerlink" title="备份"></a>备份</h2></li>
+</ul>
+]]></content>
+      <categories>
+        <category>中间件</category>
+      </categories>
+      <tags>
+        <tag>redis系列</tag>
+      </tags>
+  </entry>
+</search>

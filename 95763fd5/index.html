@@ -1,0 +1,203 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>重新认识Redis(一) | 「晓」说</title><meta name="description" content="Redis的对象类型和编码 首先我们来看一道常见的面试题:  Redis支持的数据结构有哪些？    &amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;大多数人都能轻松的给出答案,五种:String、List、Hash、Set、Zset;但其实这还远远不够,这仅仅redis的常用基本数据类型，每一种数据类型内部还包含着多种数据结构;要记住类型和结构是不"><meta name="keywords" content="redis系列"><meta name="author" content="iaoyz"><meta name="copyright" content="iaoyz"><meta name="format-detection" content="telephone=no"><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://yoursite.com/95763fd5/"><meta http-equiv="Cache-Control" content="no-transform"><meta http-equiv="Cache-Control" content="no-siteapp"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//fonts.googleapis.com" crossorigin="crossorigin"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><meta property="og:type" content="article"><meta property="og:title" content="重新认识Redis(一)"><meta property="og:url" content="http://yoursite.com/95763fd5/"><meta property="og:site_name" content="「晓」说"><meta property="og:description" content="Redis的对象类型和编码 首先我们来看一道常见的面试题:  Redis支持的数据结构有哪些？    &amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;大多数人都能轻松的给出答案,五种:String、List、Hash、Set、Zset;但其实这还远远不够,这仅仅redis的常用基本数据类型，每一种数据类型内部还包含着多种数据结构;要记住类型和结构是不"><meta property="og:image" content="http://yoursite.com/images/redisPic/redisIcon.jpg"><meta property="article:published_time" content="2019-12-17T02:40:37.000Z"><meta property="article:modified_time" content="2020-06-26T09:11:06.869Z"><meta name="twitter:card" content="summary"><script>var activateDarkMode = function () {
+  document.documentElement.setAttribute('data-theme', 'dark')
+  if (document.querySelector('meta[name="theme-color"]') !== null) {
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#000')
+  }
+}
+var activateLightMode = function () {
+  document.documentElement.setAttribute('data-theme', 'light')
+  if (document.querySelector('meta[name="theme-color"]') !== null) {
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#fff')
+  }
+}
+
+var getCookies = function (name) {
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) return parts.pop().split(';').shift()
+}
+
+var autoChangeMode = 'false'
+var t = getCookies('theme')
+if (autoChangeMode === '1') {
+  var isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+  var isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+  var isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+  var hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+
+  if (t === undefined) {
+    if (isLightMode) activateLightMode()
+    else if (isDarkMode) activateDarkMode()
+    else if (isNotSpecified || hasNoSupport) {
+      console.log('You specified no preference for a color scheme or your browser does not support it. I Schedule dark mode during night time.')
+      var now = new Date()
+      var hour = now.getHours()
+      var isNight = hour <= 6 || hour >= 18
+      isNight ? activateDarkMode() : activateLightMode()
+    }
+    window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+      if (Cookies.get('theme') === undefined) {
+        e.matches ? activateDarkMode() : activateLightMode()
+      }
+    })
+  } else if (t === 'light') activateLightMode()
+  else activateDarkMode()
+} else if (autoChangeMode === '2') {
+  now = new Date()
+  hour = now.getHours()
+  isNight = hour <= 6 || hour >= 18
+  if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+  else if (t === 'light') activateLightMode()
+  else activateDarkMode()
+} else {
+  if (t === 'dark') activateDarkMode()
+  else if (t === 'light') activateLightMode()
+}</script><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css"><link rel="prev" title="重新认识Redis(二)" href="http://yoursite.com/3a47a4b7/"><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Titillium+Web&amp;display=swap"><script>var GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"search.xml","languages":{"hits_empty":"找不到您查询的内容:${query}"}},
+  translate: {"defaultEncoding":1,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"簡"},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  bookmark: {
+    message_prev: '按',
+    message_next: '键将本页加入书签'
+  },
+  runtime_unit: '天',
+  runtime: false,
+  copyright: undefined,
+  ClickShowText: undefined,
+  medium_zoom: true,
+  fancybox: true,
+  Snackbar: undefined,
+  justifiedGallery: {
+    js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+    css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+  },
+  baiduPush: false,
+  highlightCopy: true,
+  highlightLang: true,
+  isPhotoFigcaption: true,
+  islazyload: true,
+  isanchor: false    
+}</script><script>var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: ,
+  isSidebar: false
+  }</script><noscript><style>
+#nav {
+  opacity: 1
+}
+.justified-gallery img{
+  opacity: 1
+}
+</style></noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sviptzk/HexoStaticFile@latest/Hexo/css/hideCategory.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sviptzk/StaticFile_HEXO@latest/butterfly/css/macblack.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sviptzk/StaticFile_HEXO@latest/butterfly/css/font-awesome-animation.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sviptzk/StaticFile_HEXO@latest/butterfly/css/flink.min.css"><meta name="generator" content="Hexo 4.2.1"></head><body><div id="mobile-sidebar"><div id="menu_mask"></div><div id="mobile-sidebar-menus"><div class="mobile_author_icon"><img class="avatar-img" src="/img/avatar.png" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="mobile_post_data"><div class="mobile_data_item is-center"><div class="mobile_data_link"><a href="/archives/"><div class="headline">文章</div><div class="length_num">2</div></a></div></div><div class="mobile_data_item is-center">      <div class="mobile_data_link"><a href="/tags/"><div class="headline">标签</div><div class="length_num">1</div></a></div></div><div class="mobile_data_item is-center">     <div class="mobile_data_link"><a href="/categories/"><div class="headline">分类</div><div class="length_num">1</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间轴</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/book/"><i class="fa-fw fas fa-book"></i><span> 图书</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/comment/"><i class="fa-fw fas fa-comment"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> Me</span></a></div></div></div></div><div class="code-close" id="body-wrap"><div id="web_bg" data-type="photo"></div><header class="post-bg" id="page-header" style="background-image: url(/images/redisPic/redis_icon.jpg)"><nav id="nav"><span class="pull-left" id="blog_name"><a class="blog_title" id="site-name" href="/">「晓」说</a></span><span class="pull-right menus"><div id="search_button"><a class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 主页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间轴</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/book/"><i class="fa-fw fas fa-book"></i><span> 图书</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/comment/"><i class="fa-fw fas fa-comment"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> Me</span></a></div></div><span class="toggle-menu close"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></span></span></nav><div id="post-info"><div id="post-title"><div class="posttitle">重新认识Redis(一)</div></div><div id="post-meta"><div class="meta-firstline"><time class="post-meta__date"><span class="post-meta__date-created" title="发表于 2019-12-17 10:40:37"><i class="far fa-calendar-alt fa-fw"></i> 发表于 2019-12-17</span><span class="post-meta__separator">|</span><span class="post-meta__date-updated" title="更新于 2020-06-26 17:11:06"><i class="fas fa-history fa-fw"></i> 更新于 2020-06-26</span></time><span class="post-meta__categories"><span class="post-meta__separator">|</span><i class="fas fa-inbox fa-fw post-meta__icon"></i><a class="post-meta__categories" href="/categories/%E4%B8%AD%E9%97%B4%E4%BB%B6/">中间件</a></span></div><div class="meta-secondline"> </div><div class="meta-thirdline"><span class="post-meta-pv-cv"><i class="far fa-eye fa-fw post-meta__icon"></i><span>阅读量:</span><span id="busuanzi_value_page_pv"></span></span><span class="post-meta-commentcount"></span></div></div></div></header><main class="layout_post" id="content-inner"><article id="post"><div class="post-content" id="article-container"><h1 id="Redis的对象类型和编码"><a href="#Redis的对象类型和编码" class="headerlink" title="Redis的对象类型和编码"></a>Redis的对象类型和编码</h1><blockquote>
+<p><strong>首先我们来看一道常见的面试题:  Redis支持的数据结构有哪些？</strong><br>    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;大多数人都能轻松的给出答案,五种:String、List、Hash、Set、Zset;但其实这还远远不够,这仅仅redis的常用基本数据类型，每一种数据类型内部还包含着多种数据结构;<strong>要记住类型和结构是不一样的</strong></p>
+</blockquote>
+<p><img src= "/img/loading.gif" data-src="/images/redisPic/redis%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84.jpg" alt=""></p>
+<h3 id="我们来看一组实验"><a href="#我们来看一组实验" class="headerlink" title="我们来看一组实验"></a>我们来看一组实验</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">通过[<span class="built_in">type</span> key]指令查看值的数据类型</span><br><span class="line">通过[object encoding key]指令查看值的数据结构</span><br><span class="line"></span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">set</span> str1 1</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">type</span> str1</span><br><span class="line">string</span><br><span class="line">127.0.0.1:6379&gt; object encoding str1</span><br><span class="line"><span class="string">"int"</span></span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">set</span> str2 <span class="string">"zhangsan"</span></span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; <span class="built_in">type</span> str2</span><br><span class="line">string</span><br><span class="line">127.0.0.1:6379&gt; object encoding str2</span><br><span class="line"><span class="string">"embstr"</span></span><br></pre></td></tr></table></figure>
+<p>可以得出几个重要的结论</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1.redis的数据结构有很多种</span><br><span class="line">2.即便是同一个String类型的值,根据value的不通,redis选择的数据结构是不一样的</span><br><span class="line"></span><br><span class="line">“思考:为什么同一个String类型的值,会有多个数据结构?,选择的依据又是什么?”</span><br></pre></td></tr></table></figure>
+<p>带着问题我们接着往下看</p>
+<hr>
+<h2 id="redisObject"><a href="#redisObject" class="headerlink" title="redisObject"></a>redisObject</h2><blockquote>
+<blockquote>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Redis使用对象来表示数据库中的键和值,每次当我们在Redis的数据库中新创建一个键值对时，我们至少会创建两个对象，一个对象用作键值对的键（键对象），另一个对象用作键值对的值（值对象）</p>
+</blockquote>
+</blockquote>
+<p><strong>举个栗子</strong>:<br>    以下 SET 命令在数据库中创建了一个新的键值对， 其中键值对的键是一个包含了字符串值 “str” 的对象， 而键值对的值则是一个包含了字符串值 “zhangsan” 的对象,<font color=red size=3><em>通过键对象中的指针指向值对象</em></font></p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; <span class="built_in">set</span> str <span class="string">"zhangsan"</span></span><br><span class="line">OK</span><br></pre></td></tr></table></figure>
+<p>Redis中定义了一个C语言实现的结构体作为对象</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">redisObject</span> &#123;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 对象类型</span></span><br><span class="line">    <span class="keyword">unsigned</span> type:<span class="number">4</span>;        </span><br><span class="line"></span><br><span class="line">    <span class="comment">// 不使用(对齐位)</span></span><br><span class="line">    <span class="keyword">unsigned</span> notused:<span class="number">2</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 底层编码方式</span></span><br><span class="line">    <span class="keyword">unsigned</span> encoding:<span class="number">4</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// LRU 时间（相对于 server.lruclock）</span></span><br><span class="line">    <span class="keyword">unsigned</span> lru:<span class="number">22</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 引用计数</span></span><br><span class="line">    <span class="keyword">int</span> refcount;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 指向对象的值</span></span><br><span class="line">    <span class="keyword">void</span> *ptr;</span><br><span class="line"></span><br><span class="line">&#125; robj;</span><br></pre></td></tr></table></figure>
+<h2 id="type-对象类型"><a href="#type-对象类型" class="headerlink" title="type-对象类型"></a>type-对象类型</h2><p>属性 type 记录了对象是什么类型,值的相关定义如下:</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">define OBJ_STRING 0</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_LIST 1</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_SET 2</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ZSET 3</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_HASH 4</span></span><br></pre></td></tr></table></figure>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;前面说到，键和值都是一个对象。键总是一个字符串对象，其属性 type 总为 OBJ_STRING ，值对象则可以是字符串对象，列表对象等，不同的类型的对象，实则就是属性 type 不同的 <strong>redisObject</strong> 。如列表键，指的是属性 type 为 OBJ_LIST 的值对象。</p>
+<h5 id="可以通过客户端指令-type-key-查看值对象的数据类型-本文开头已经演示过了"><a href="#可以通过客户端指令-type-key-查看值对象的数据类型-本文开头已经演示过了" class="headerlink" title="可以通过客户端指令[type key]查看值对象的数据类型,本文开头已经演示过了"></a><code>可以通过客户端指令[type key]查看值对象的数据类型,本文开头已经演示过了</code></h5><h2 id="encoding-编码类型"><a href="#encoding-编码类型" class="headerlink" title="encoding-编码类型"></a>encoding-编码类型</h2><p>属性 encoding ，其实指的是该对象底层所使用的数据结构类型，即指针 ptr 所指向的数据结构，相关的定义如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_RAW 0     /* 简单动态字符串 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_INT 1     /* 整型 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_HT 2      /* 字典 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_ZIPMAP 3  /* 压缩字典（不再使用）*/</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_LINKEDLIST 4 /* 双端链表（不再使用） */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_ZIPLIST 5 /* 压缩列表 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_INTSET 6  /* 整数集合 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_SKIPLIST 7  /* 跳表 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_EMBSTR 8  /* Embedded 编码的简单动态字符串 */</span></span><br><span class="line"><span class="meta">#</span><span class="bash">define OBJ_ENCODING_QUICKLIST 9 /* 快速列表，基于压缩列表实现的列表，取代了之前的双端链表 */</span></span><br></pre></td></tr></table></figure>
+<h5 id="可以通过客户端指令-object-encoding-key-查看值对象的数据结构-本文开头已经演示过了"><a href="#可以通过客户端指令-object-encoding-key-查看值对象的数据结构-本文开头已经演示过了" class="headerlink" title="可以通过客户端指令[object encoding key]查看值对象的数据结构,本文开头已经演示过了"></a><code>可以通过客户端指令[object encoding key]查看值对象的数据结构,本文开头已经演示过了</code></h5><p><font color=red size=5>还记得前文的思考题吗?</font></p>
+<blockquote>
+<p>“思考:为什么同一个String类型的值,会有多个数据结构?,选择的依据又是什么?”</p>
+</blockquote>
+<p>官方提供的对象类型与编码类型关系表可以解答我们的第一个问题:</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>编码</th>
+<th>对象</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OBJ_STRING</td>
+<td>OBJ_ENCODING_INT</td>
+<td>使用long类型的整数值实现的字符串对象</td>
+</tr>
+<tr>
+<td>OBJ_STRING</td>
+<td>OBJ_ENCODING_EMBSTR</td>
+<td>使用embstr编码的简单动态字符串实现的字符串对象</td>
+</tr>
+<tr>
+<td>OBJ_STRING</td>
+<td>OBJ_ENCODING_RAW</td>
+<td>使用简单动态字符串实现的字符串对象</td>
+</tr>
+<tr>
+<td>OBJ_LIST</td>
+<td>OBJ_ENCODING_QUICKLIST</td>
+<td>使用 quicklist 实现的列表对象</td>
+</tr>
+<tr>
+<td>OBJ_HASH</td>
+<td>OBJ_ENCODING_ZIPLIST</td>
+<td>使用压缩列表实现的哈希对象</td>
+</tr>
+<tr>
+<td>OBJ_HASH</td>
+<td>OBJ_ENCODING_HT</td>
+<td>使用字典实现的哈希对象</td>
+</tr>
+<tr>
+<td>OBJ_SET</td>
+<td>OBJ_ENCODING_INTSET</td>
+<td>使用数组实现的集合对象,元素从小到大排列</td>
+</tr>
+<tr>
+<td>OBJ_SET</td>
+<td>OBJ_ENCODING_HT</td>
+<td>使用字典实现的哈希对象</td>
+</tr>
+<tr>
+<td>OBJ_ZSET</td>
+<td>OBJ_ENCODING_ZIPLIST</td>
+<td>使用压缩列表实现的有序集合对象</td>
+</tr>
+<tr>
+<td>OBJ_ZSET</td>
+<td>OBJ_ENCODING_SKIPLIST</td>
+<td>使用跳跃表实现的有序集合对象</td>
+</tr>
+</tbody></table>
+<p>能看出来字符串的编码可以是int，raw或者embstr;</p>
+<p>那又是怎么选择的呢?</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">如果一个字符串内容可转为long，那么该字符串会被转化为long类型，对象ptr指向该long对象，并且对象类型也用int类型表示。普通的字符串有两种，embstr和raw。如果字符串对象的长度小于44字节，就用embstr对象。否则用的raw对象</span><br></pre></td></tr></table></figure>
+<h5 id="C语言实现的代码细节-这里就不看了-有兴趣可以看看Redis的String实现原理"><a href="#C语言实现的代码细节-这里就不看了-有兴趣可以看看Redis的String实现原理" class="headerlink" title="C语言实现的代码细节,这里就不看了,有兴趣可以看看Redis的String实现原理"></a><code>C语言实现的代码细节,这里就不看了,有兴趣可以看看</code><a href="https://blog.csdn.net/a81561826/article/details/102047824" target="_blank" rel="noopener">Redis的String实现原理</a></h5><blockquote>
+<p>优点：<br>    (1) embstr的创建只需分配一次内存，而raw为两次（一次为sds分配对象，另一次为redisObject分配对象，embstr省去了第一次）。<br>        (2）相对地，释放内存的次数也由两次变为一次。<br>        (3）embstr的redisObject和sds放在一起，更好地利用缓存带来的优势</p>
+<blockquote>
+<p>缺点：<br>    redis并未提供任何修改embstr的方式，即embstr是只读的形式。对embstr的修改实际上是先转换为raw再进行修改。</p>
+</blockquote>
+</blockquote>
+<h2 id="lru-空转时间"><a href="#lru-空转时间" class="headerlink" title="lru-空转时间"></a>lru-空转时间</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;属性 lru 记录的是对象最后一次被访问的时间。通过该属性，可以利用命令 [object idletime key] 获取对象的空转时长（命令[object idletime key]不会更新 lru 属性）。object idletime 计算得出的空转时长是通过当前时间减去指定对象的 lru 属性得出的，其单位为秒。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; object idletime str2</span><br><span class="line">(<span class="built_in">integer</span>) 3636</span><br></pre></td></tr></table></figure>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;属性 lru 除了应用于命令 object idletime 外，还有另一项作用。<br>当服务器开启了 maxmemory 选项，并且服务器用于回收内存的算法为 volatile-lru 或者 allkeys-lru 的话，那么当 Redis 实例的占用的内存超过 maxmemory 后，空转时间较长的对象将会优先被回收。</p>
+<h2 id="refcount-引用计数"><a href="#refcount-引用计数" class="headerlink" title="refcount-引用计数"></a>refcount-引用计数</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;refcount记录的是对象被引用数。Redis 构建的对象系统使用引用计数机制实现内存回收。引用计算为 0 的对象将会被回收。</p>
+<h2 id="编码转换"><a href="#编码转换" class="headerlink" title="编码转换"></a>编码转换</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;通过前面的类型编码映射表可以看到,除了List外,String,Hash,Set,Zset都具有多种编码结构;</p>
+<h3 id="String前面已经讲过了-不再讲了"><a href="#String前面已经讲过了-不再讲了" class="headerlink" title="String前面已经讲过了,不再讲了"></a>String前面已经讲过了,不再讲了</h3><h3 id="Hash"><a href="#Hash" class="headerlink" title="Hash"></a>Hash</h3><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  hash-max-ziplist-entries 512</span><br><span class="line">  hash-max-ziplist-value 64</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  哈希对象保存的元素数量小于 512 个</span><br><span class="line">  哈希对象保存的所有字符串元素的长度都小于 64 字节</span><br><span class="line"></span><br><span class="line">不能满足上述条件的哈希对象将使用 OBJ_ENCODING_HT 作为对象编码，即使用字典作为底层数据结构。否则使用 OBJ_ENCODING_ZIPLIST 作为对象编码，即压缩列表作为底层数据结构。</span><br><span class="line"></span><br><span class="line">优化方案:将hash尽可能的拆成多个小hash,利用zipList节省内存</span><br></pre></td></tr></table></figure>
+<h3 id="Set"><a href="#Set" class="headerlink" title="Set"></a>Set</h3><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  set-max-intset-entries 512</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  集合对象保存的元素数量不超过512个</span><br><span class="line"></span><br><span class="line">不能满足上述条件，或是元素不全部为整数（ intset 数据结构的天然限制）的集合对象，将使用 OBJ_ENCODING_HT 作为对象编码，即使用字典作为底层数据结构。否则使用 OBJ_ENCODING_INTSET 作为对象编码，即 intset 作为底层数据结构。</span><br></pre></td></tr></table></figure>
+<h3 id="Zset"><a href="#Zset" class="headerlink" title="Zset"></a>Zset</h3><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">配置文件参数:</span><br><span class="line">  zset-max-ziplist-entries 128</span><br><span class="line">  zset-max-ziplist-value 64</span><br><span class="line"></span><br><span class="line">配置的含义为：</span><br><span class="line">  有序集合保存的元素数量小于128个</span><br><span class="line">  有序集合保存的所有元素成员的长度都小于64字节</span><br><span class="line"></span><br><span class="line">不能满足上述条件的有序集合对象，将使用 OBJ_ENCODING_SKIPLIST 作为对象编码，即跳跃表作为底层数据结构。否则使用 OBJ_ENCODING_ZIPLIST 作为对象编码，即压缩列表作为底层数据结构。</span><br></pre></td></tr></table></figure>
+</div><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">iaoyz</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="http://yoursite.com/95763fd5/">http://yoursite.com/95763fd5/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="http://yoursite.com" target="_blank">「晓」说</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/redis%E7%B3%BB%E5%88%97/">redis系列</a></div><div class="post_share"><div class="social-share" data-image="/images/redisPic/redisIcon.jpg" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css"/><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js"></script></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-full"><a href="/3a47a4b7/"><img class="prev-cover" data-src="/images/redisPic/redisIcon.jpg" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">重新认识Redis(二)</div></div></a></div></nav><div class="relatedPosts"><div class="relatedPosts_headline"><i class="fas fa-thumbs-up fa-fw"></i><span> 相关推荐</span></div><div class="relatedPosts_list"><div class="relatedPosts_item"><a href="/3a47a4b7/" title="重新认识Redis(二)"><img class="relatedPosts_cover" data-src="images/redisPic/redisIcon.jpg"><div class="relatedPosts_main is-center"><div class="relatedPosts_date"><i class="far fa-calendar-alt fa-fw"></i> 2019-12-23</div><div class="relatedPosts_title">重新认识Redis(二)</div></div></a></div></div></div></article></main><footer id="footer" data-type="color"><div id="footer-wrap"><div class="copyright">&copy;2020 By iaoyz</div><div class="framework-info"><span>驱动 </span><a href="https://hexo.io" target="_blank" rel="noopener"><span>Hexo</span></a><span class="footer-separator">|</span><span>主题 </span><a href="https://github.com/jerryc127/hexo-theme-butterfly" target="_blank" rel="noopener"><span>Butterfly</span></a></div><div class="footer_custom_text"><a href="https://www.upyun.com/?utm_source=lianmeng&amp;utm_medium=referral" target="_blank" rel="noopener"><img src="/img/ypy_logo6 .png"></a></div><div class="icp"><a href="http://www.beian.gov.cn" target="_blank" rel="noopener"><img class="icp-icon" src="/img/icp.png"/><span>皖ICP备20011729号</span></a></div></div></footer></div><section class="rightside" id="rightside"><div id="rightside-config-hide"><button id="readmode" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="font_plus" title="放大字体"><i class="fas fa-plus"></i></button><button id="font_minus" title="缩小字体"><i class="fas fa-minus"></i></button><button class="translate_chn_to_cht" id="translateLink" title="简繁转换">簡</button><button id="darkmode" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button></div><div id="rightside-config-show"><button id="rightside_config" title="设置"><i class="fas fa-cog"></i></button><button id="go-up" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></section><div class="search-dialog" id="local-search"><div class="search-dialog__title" id="local-search-title">本地搜索</div><div id="local-input-panel"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div></div><hr/><div id="local-search-results"><div id="local-hits"></div><div id="local-stats"><div class="local-search-stats__hr" id="hr"><span>由</span> <a href="https://github.com/wzpan/hexo-generator-search" target="_blank" rel="noopener" style="color:#49B1F5;">hexo-generator-search</a>
+ <span>提供支持</span></div></div></div><span class="search-close-button"><i class="fas fa-times"></i></span></div><div class="search-mask"></div><script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="/js/tw_cn.js"></script><script src="https://cdn.jsdelivr.net/npm/medium-zoom/dist/medium-zoom.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js"></script><script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script><script src="https://cdn.jsdelivr.net/npm/instant.page/instantpage.min.js" type="module" defer></script><script src="https://cdn.jsdelivr.net/npm/vanilla-lazyload/dist/lazyload.iife.min.js" async></script><script src="/js/search/local-search.js"></script><script src="https://cdn.jsdelivr.net/gh/sviptzk/HexoStaticFile@latest/Hexo/js/hideCategory.min.js"></script><script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"model":{"jsonPath":"/live2dw/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":false},"log":false,"pluginJsPath":"lib/","pluginModelPath":"assets/","pluginRootPath":"live2dw/","tagMode":false});</script></body></html>
